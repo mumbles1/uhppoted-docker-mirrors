@@ -262,3 +262,11 @@ jobs:
           grep -q 'linux/amd64' <<< "$inspection"
           grep -q 'linux/arm64' <<< "$inspection"
           grep -q 'linux/arm/v7' <<< "$inspection"
+
+      - name: Verify anonymous pull
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${{ github.repository_owner }}/${{ steps.package.outputs.name }}:latest"
+          docker logout ghcr.io
+          docker pull "$image"
