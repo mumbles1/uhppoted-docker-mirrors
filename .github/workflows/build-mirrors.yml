@@ -39,24 +39,28 @@ jobs:
               package="uhppoted-simulator"
               binary="uhppote-simulator"
               title="Simulator"
+              source_ref="080e01f432e14f545e823304813985c292918cce"
               ;;
             rest)
               repository="uhppoted-rest"
               package="uhppoted-rest"
               binary="uhppoted-rest"
               title="REST API"
+              source_ref="50c104daa286d23e462f66c79503c9ef8bff9b1d"
               ;;
             mqtt)
               repository="uhppoted-mqtt"
               package="uhppoted-mqtt"
               binary="uhppoted-mqtt"
               title="MQTT endpoint"
+              source_ref="7153e37a33b942598f7c08281ee5ae01f80e8862"
               ;;
             httpd)
               repository="uhppoted-httpd"
               package="uhppoted-httpd"
               binary="uhppoted-httpd"
               title="HTTP administration UI"
+              source_ref="35343c1e0222eb8466c84530b99640b115e54f1c"
               ;;
           esac
 
@@ -82,6 +86,7 @@ jobs:
           echo "package=$package" >> "$GITHUB_OUTPUT"
           echo "binary=$binary" >> "$GITHUB_OUTPUT"
           echo "title=$title" >> "$GITHUB_OUTPUT"
+          echo "source_ref=$source_ref" >> "$GITHUB_OUTPUT"
           echo "goarch=$goarch" >> "$GITHUB_OUTPUT"
           echo "goarm=$goarm" >> "$GITHUB_OUTPUT"
           echo "platform=$platform" >> "$GITHUB_OUTPUT"
@@ -91,7 +96,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 "https://codeberg.org/uhppoted/${{ steps.component.outputs.repository }}.git" upstream
+          git init upstream
+          git -C upstream remote add origin "https://github.com/${{ github.repository_owner }}/${{ steps.component.outputs.repository }}.git"
+          git -C upstream fetch --depth 1 origin "${{ steps.component.outputs.source_ref }}"
+          git -C upstream checkout --detach FETCH_HEAD
 
           dockerfile=""
 
@@ -175,9 +183,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ steps.component.outputs.package }}
           labels: |
-            org.opencontainers.image.title=UHPPOTED ${{ steps.component.outputs.title }} temporary mirror
-            org.opencontainers.image.description=Unofficial source-built temporary mirror of ${{ steps.component.outputs.repository }}
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.title=UHPPOTED ${{ steps.component.outputs.title }} maintained downstream
+            org.opencontainers.image.description=Maintained source-built downstream image of ${{ steps.component.outputs.repository }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository_owner }}/${{ steps.component.outputs.repository }}
             org.opencontainers.image.url=https://codeberg.org/uhppoted/${{ steps.component.outputs.repository }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.revision }}
             org.opencontainers.image.licenses=MIT
