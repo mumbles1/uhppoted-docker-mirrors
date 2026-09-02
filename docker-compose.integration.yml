@@ -1,0 +1,46 @@
+name: uhppoted-integration
+
+services:
+  simulator:
+    profiles: ["simulator"]
+    image: ghcr.io/mumbles1/uhppoted-simulator:latest
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8000:8000/tcp"
+      - "60000:60000/tcp"
+      - "60000:60000/udp"
+    volumes:
+      - simulator-data:/usr/local/etc/uhppoted/simulator
+    networks:
+      - access-control
+
+  rest-simulator:
+    profiles: ["simulator"]
+    image: ghcr.io/mumbles1/uhppoted-rest:latest
+    restart: unless-stopped
+    init: true
+    depends_on:
+      - simulator
+    ports:
+      - "8080:8080/tcp"
+    volumes:
+      - ./config/uhppoted-simulator.conf:/usr/local/etc/uhppoted/uhppoted.conf:ro
+    networks:
+      - access-control
+
+  rest-physical:
+    profiles: ["physical"]
+    image: ghcr.io/mumbles1/uhppoted-rest:latest
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    volumes:
+      - ./config/uhppoted-physical.conf:/usr/local/etc/uhppoted/uhppoted.conf:ro
+
+networks:
+  access-control:
+    driver: bridge
+
+volumes:
+  simulator-data:
