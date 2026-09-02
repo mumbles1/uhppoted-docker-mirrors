@@ -54,3 +54,7 @@ It is an API endpoint, not a graphical web page.
 
 These packages are not official UHPPOTED releases and are not affiliated with or endorsed by the upstream project. The original licenses and copyrights remain with the upstream authors. Replace these temporary images with the official packages when the upstream registry is consistently available.
 
+
+## Docker Compose integration
+
+Use [`docker-compose.integration.yml`](docker-compose.integration.yml) to run either the simulator test stack or the physical-controller REST service. See [`DEPLOYMENT.md`](DEPLOYMENT.md) for startup and verification commands.
