@@ -1,0 +1,115 @@
+name: uhppoted-casaos
+
+services:
+  simulator:
+    image: ghcr.io/mumbles1/uhppoted-simulator:latest
+    container_name: uhppoted-simulator
+    restart: unless-stopped
+    init: true
+    ports:
+      - target: 8000
+        published: "8000"
+        protocol: tcp
+      - target: 60000
+        published: "60000"
+        protocol: tcp
+      - target: 60000
+        published: "60000"
+        protocol: udp
+    volumes:
+      - type: volume
+        source: simulator-data
+        target: /usr/local/etc/uhppoted/simulator
+    networks:
+      - uhppoted
+    x-casaos:
+      ports:
+        - container: "8000"
+          description:
+            en_US: Simulator management API
+        - container: "60000"
+          description:
+            en_US: UHPPOTE controller protocol (TCP)
+        - container: "60000"
+          protocol: udp
+          description:
+            en_US: UHPPOTE controller protocol (UDP)
+      volumes:
+        - container: /usr/local/etc/uhppoted/simulator
+          description:
+            en_US: Persistent simulated controller data
+
+  rest:
+    image: ghcr.io/mumbles1/uhppoted-rest:latest
+    container_name: uhppoted-rest
+    restart: unless-stopped
+    init: true
+    depends_on:
+      - simulator
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cat > /tmp/uhppoted.conf <<'EOF'
+        bind.address = 0.0.0.0:0
+        broadcast.address = 255.255.255.255:60000
+
+        rest.http.enabled = true
+        rest.http.port = 8080
+        rest.https.enabled = false
+        rest.CORS.enabled = true
+
+        UT0311-L0x.405419896.address = simulator:60000
+        UT0311-L0x.405419896.door.1 = Front Door
+        UT0311-L0x.405419896.door.2 = Side Door
+        UT0311-L0x.405419896.door.3 = Office
+        UT0311-L0x.405419896.door.4 = Storage
+        EOF
+        exec /opt/uhppoted/uhppoted-rest --config /tmp/uhppoted.conf --console
+    ports:
+      - target: 8080
+        published: "8080"
+        protocol: tcp
+    networks:
+      - uhppoted
+    x-casaos:
+      ports:
+        - container: "8080"
+          description:
+            en_US: UHPPOTED operational REST API
+
+networks:
+  uhppoted:
+    driver: bridge
+
+volumes:
+  simulator-data:
+
+x-casaos:
+  id: com.turnageautomation.uhppoted-simulator
+  main: simulator
+  index: /uhppote/simulator
+  port_map: "8000"
+  scheme: http
+  icon: https://cdn.jsdelivr.net/npm/@mdi/svg@7.4.47/svg/door-closed-lock.svg
+  title:
+    en_US: UHPPOTED Simulator
+  tagline:
+    en_US: UHPPOTE controller simulator with operational REST API
+  description:
+    en_US: Runs a persistent four-door UHPPOTE controller simulator and the UHPPOTED REST service for integration testing.
+  tips:
+    before_install:
+      en_US: Ports 8000, 8080, and 60000 must be available. The endpoints are APIs rather than graphical web pages.
+  author: Turnage Automation
+  developer: UHPPOTED
+  category: Home
+  architectures:
+    - amd64
+    - arm64
+    - arm
+  version: "0.9.0"
+  update_at: "2026-09-02"
+  website: https://codeberg.org/uhppoted
+  repo: https://github.com/mumbles1/uhppoted-docker-mirrors
+  docs: https://github.com/mumbles1/uhppoted-docker-mirrors/blob/main/DEPLOYMENT.md
