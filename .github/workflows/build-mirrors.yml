@@ -15,48 +15,118 @@ concurrency:
 
 jobs:
   build:
-    name: Build ${{ matrix.component }}
+    name: Build ${{ matrix.service }} (${{ matrix.arch }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - component: simulator
-            repository: uhppoted-simulator
-            package: uhppoted-simulator
-          - component: REST API
-            repository: uhppoted-rest
-            package: uhppoted-rest
-          - component: MQTT endpoint
-            repository: uhppoted-mqtt
-            package: uhppoted-mqtt
-          - component: HTTP administration UI
-            repository: uhppoted-httpd
-            package: uhppoted-httpd
+        service: [simulator, rest, mqtt, httpd]
+        arch: [amd64, arm64, armv7]
 
     steps:
       - name: Check out mirror metadata
         uses: actions/checkout@v4
+
+      - name: Resolve component and architecture
+        id: component
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "${{ matrix.service }}" in
+            simulator)
+              repository="uhppoted-simulator"
+              package="uhppoted-simulator"
+              binary="uhppote-simulator"
+              title="Simulator"
+              ;;
+            rest)
+              repository="uhppoted-rest"
+              package="uhppoted-rest"
+              binary="uhppoted-rest"
+              title="REST API"
+              ;;
+            mqtt)
+              repository="uhppoted-mqtt"
+              package="uhppoted-mqtt"
+              binary="uhppoted-mqtt"
+              title="MQTT endpoint"
+              ;;
+            httpd)
+              repository="uhppoted-httpd"
+              package="uhppoted-httpd"
+              binary="uhppoted-httpd"
+              title="HTTP administration UI"
+              ;;
+          esac
+
+          case "${{ matrix.arch }}" in
+            amd64)
+              goarch="amd64"
+              goarm=""
+              platform="linux/amd64"
+              ;;
+            arm64)
+              goarch="arm64"
+              goarm=""
+              platform="linux/arm64"
+              ;;
+            armv7)
+              goarch="arm"
+              goarm="7"
+              platform="linux/arm/v7"
+              ;;
+          esac
+
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "binary=$binary" >> "$GITHUB_OUTPUT"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
+          echo "goarch=$goarch" >> "$GITHUB_OUTPUT"
+          echo "goarm=$goarm" >> "$GITHUB_OUTPUT"
+          echo "platform=$platform" >> "$GITHUB_OUTPUT"
 
       - name: Check out upstream source
         id: upstream
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 "https://codeberg.org/uhppoted/${{ matrix.repository }}.git" upstream
+          git clone --depth 1 "https://codeberg.org/uhppoted/${{ steps.component.outputs.repository }}.git" upstream
 
-          dockerfile="$(find upstream/docker -maxdepth 3 -type f -iname 'Dockerfile*' | sort | head -n 1)"
+          if [ -f upstream/docker/dev/Dockerfile ]; then
+            dockerfile="upstream/docker/dev/Dockerfile"
+          else
+            dockerfile="$(find upstream/docker -maxdepth 3 -type f -iname 'Dockerfile*' | sort | head -n 1)"
+          fi
+
           if [ -z "$dockerfile" ]; then
             echo "No upstream Dockerfile was found under upstream/docker" >&2
             exit 1
           fi
 
-          version="$(git -C upstream describe --tags --abbrev=0 2>/dev/null || true)"
-          version="${version#v}"
-
           echo "dockerfile=$dockerfile" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "context=$(dirname "$dockerfile")" >> "$GITHUB_OUTPUT"
           echo "revision=$(git -C upstream rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: upstream/go.sum
+
+      - name: Compile target binary
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ steps.component.outputs.goarch }}
+          GOARM: ${{ steps.component.outputs.goarm }}
+        run: |
+          set -euo pipefail
+          output="$GITHUB_WORKSPACE/${{ steps.upstream.outputs.context }}/${{ steps.component.outputs.binary }}"
+          cd upstream
+          go build -trimpath -ldflags="-s -w" -o "$output" "./cmd/${{ steps.component.outputs.binary }}"
+          test -x "$output"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -75,30 +145,84 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.package }}
+          images: ghcr.io/${{ github.repository_owner }}/${{ steps.component.outputs.package }}
           labels: |
-            org.opencontainers.image.title=UHPPOTED ${{ matrix.component }} temporary mirror
-            org.opencontainers.image.description=Unofficial source-built temporary mirror of ${{ matrix.repository }}
+            org.opencontainers.image.title=UHPPOTED ${{ steps.component.outputs.title }} temporary mirror
+            org.opencontainers.image.description=Unofficial source-built temporary mirror of ${{ steps.component.outputs.repository }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.url=https://codeberg.org/uhppoted/${{ matrix.repository }}
+            org.opencontainers.image.url=https://codeberg.org/uhppoted/${{ steps.component.outputs.repository }}
             org.opencontainers.image.revision=${{ steps.upstream.outputs.revision }}
             org.opencontainers.image.licenses=MIT
           tags: |
-            type=raw,value=latest
-            type=sha,prefix=sha-
-            type=raw,value=${{ steps.upstream.outputs.version }},enable=${{ steps.upstream.outputs.version != '' }}
+            type=raw,value=staging-${{ github.run_id }}-${{ matrix.arch }}
 
-      - name: Build and publish image
+      - name: Build and publish architecture image
         uses: docker/build-push-action@v6
         with:
-          context: ./upstream
-          file: ./${{ steps.upstream.outputs.dockerfile }}
-          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          context: ${{ steps.upstream.outputs.context }}
+          file: ${{ steps.upstream.outputs.dockerfile }}
+          platforms: ${{ steps.component.outputs.platform }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.package }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.package }}
+          cache-from: type=gha,scope=${{ steps.component.outputs.package }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ steps.component.outputs.package }}-${{ matrix.arch }}
           provenance: mode=max
           sbom: true
 
+  manifest:
+    name: Publish ${{ matrix.service }} manifest
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [simulator, rest, mqtt, httpd]
+
+    steps:
+      - name: Resolve package
+        id: package
+        shell: bash
+        run: |
+          case "${{ matrix.service }}" in
+            simulator) echo "name=uhppoted-simulator" >> "$GITHUB_OUTPUT" ;;
+            rest) echo "name=uhppoted-rest" >> "$GITHUB_OUTPUT" ;;
+            mqtt) echo "name=uhppoted-mqtt" >> "$GITHUB_OUTPUT" ;;
+            httpd) echo "name=uhppoted-httpd" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish multi-platform manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${{ github.repository_owner }}/${{ steps.package.outputs.name }}"
+          short_sha="${GITHUB_SHA:0:7}"
+
+          docker buildx imagetools create \
+            --tag "$image:latest" \
+            --tag "$image:sha-$short_sha" \
+            --tag "$image:run-${{ github.run_number }}" \
+            "$image:staging-${{ github.run_id }}-amd64" \
+            "$image:staging-${{ github.run_id }}-arm64" \
+            "$image:staging-${{ github.run_id }}-armv7"
+
+      - name: Verify manifest platforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${{ github.repository_owner }}/${{ steps.package.outputs.name }}:latest"
+          inspection="$(docker buildx imagetools inspect "$image")"
+          echo "$inspection"
+          grep -q 'linux/amd64' <<< "$inspection"
+          grep -q 'linux/arm64' <<< "$inspection"
+          grep -q 'linux/arm/v7' <<< "$inspection"
