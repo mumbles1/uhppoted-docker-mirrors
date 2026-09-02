@@ -1,0 +1,13 @@
+services:
+  simulator:
+    image: ghcr.io/mumbles1/uhppoted-simulator:latest
+    container_name: uhppoted-simulator
+    restart: unless-stopped
+    ports:
+      - "8000:8000/tcp"
+      - "60000:60000/udp"
+    volumes:
+      - /DATA/AppData/uhppoted-simulator:/usr/local/etc/uhppoted
+    labels:
+      com.turnageautomation.description: "Temporary UHPPOTED controller simulator"
+
