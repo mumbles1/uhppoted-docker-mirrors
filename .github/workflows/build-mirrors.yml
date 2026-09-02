@@ -93,10 +93,25 @@ jobs:
           set -euo pipefail
           git clone --depth 1 "https://codeberg.org/uhppoted/${{ steps.component.outputs.repository }}.git" upstream
 
-          if [ -f upstream/docker/dev/Dockerfile ]; then
+          dockerfile=""
+
+          for candidate in \
+            upstream/docker/Dockerfile \
+            upstream/docker/release/Dockerfile \
+            upstream/docker/compose/Dockerfile
+          do
+            if [ -f "$candidate" ]; then
+              dockerfile="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$dockerfile" ]; then
+            dockerfile="$(find upstream/docker -maxdepth 3 -type f -iname 'Dockerfile*' ! -path '*/dev/*' | sort | head -n 1)"
+          fi
+
+          if [ -z "$dockerfile" ] && [ -f upstream/docker/dev/Dockerfile ]; then
             dockerfile="upstream/docker/dev/Dockerfile"
-          else
-            dockerfile="$(find upstream/docker -maxdepth 3 -type f -iname 'Dockerfile*' | sort | head -n 1)"
           fi
 
           if [ -z "$dockerfile" ]; then
