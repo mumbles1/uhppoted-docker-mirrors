@@ -60,7 +60,7 @@ jobs:
               package="uhppoted-httpd"
               binary="uhppoted-httpd"
               title="HTTP administration UI"
-              source_ref="9b1643bd5e2fc7012bc4841b0f32c96b31f7c4ff"
+              source_ref="7b1feb4a8a50c867d93cd3d524b439e1908e1389"
               ;;
           esac
 
