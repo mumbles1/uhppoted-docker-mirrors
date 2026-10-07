@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [simulator, rest, mqtt, httpd]
+        service: [httpd]
         arch: [amd64, arm64, armv7]
 
     steps:
@@ -212,7 +212,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [simulator, rest, mqtt, httpd]
+        service: [httpd]
 
     steps:
       - name: Resolve package
