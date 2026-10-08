@@ -60,7 +60,7 @@ jobs:
               package="uhppoted-httpd"
               binary="uhppoted-httpd"
               title="HTTP administration UI"
-              source_ref="0232e0049c00d92284183737ccb8be46b0bd7ee8"
+              source_ref="f6afbf5f502eb1e9d4f385d0206bcb39715d34d0"
               ;;
           esac
 
@@ -269,6 +269,7 @@ jobs:
           image="ghcr.io/${{ github.repository_owner }}/${{ steps.package.outputs.name }}:latest"
           docker logout ghcr.io
           docker pull "$image"
+
 
 
 
